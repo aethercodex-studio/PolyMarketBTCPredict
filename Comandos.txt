@@ -1,0 +1,5 @@
+pip install requests pandas
+cd PolyMarketPredict
+Actualizar datos python script.py
+ejecutar servidor python -m http.server
+abrir http://localhost:8000/
