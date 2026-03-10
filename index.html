@@ -2,49 +2,108 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard BTC - Heatmap & Reloj</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Heatmap BTC 5 Minutos (Real)</title>
+    <style>
+        body { font-family: sans-serif; background-color: #1e1e1e; color: white; margin: 20px;}
+        .table-container { overflow-x: auto; max-height: 85vh; border: 1px solid #444; }
+        table { border-collapse: collapse; white-space: nowrap; }
+        th, td { border: 1px solid #333; padding: 6px; text-align: center; font-size: 13px; font-weight: bold;}
+        th { background-color: #2c2c2c; position: sticky; top: 0; z-index: 1;}
+        .col-fija { position: sticky; left: 0; background-color: #2c2c2c; z-index: 2; min-width: 80px;}
+        .header-esquina { z-index: 3 !important; }
+    </style>
 </head>
 <body>
 
-    <header class="header-title">
-        <h2>Análisis BTC (UP/DOWN en 5 Min)</h2>
-        <p>Dashboard de Probabilidades y Conversor Horario</p>
-    </header>
-
+    <h2>Análisis BTC (UP/DOWN en 5 Min) - Histórico</h2>
     <div class="table-container">
         <table id="heatmapTable">
             <thead id="tableHead"></thead>
             <tbody id="tableBody"></tbody>
         </table>
     </div>
-<div class="card card-link">
-    <div class="card-header">
-        <h3>🔗 Herramientas Externas</h3>
-    </div>
-    <p class="helper-text" style="margin-bottom: 20px;">Accede a la calculadora avanzada de Criterio de Kelly para gestionar tu riesgo.</p>
-    <a href="https://fical.net/es/calculadora-de-criterio-de-kelly" target="_blank" class="btn-link">
-        Abrir Calculadora de Kelly
-    </a>
-</div>
-    <div class="grid-tools">
-        <div class="card">
-            <div class="card-header">
-                <h3>🕒 Conversor Horario</h3>
-            </div>
-            <div class="input-group">
-                <label>Hora España (CET/CEST)</label>
-                <input type="time" id="horaCET">
-            </div>
-            <div class="input-group">
-                <label>Hora New York (ET)</label>
-                <input type="time" id="horaET">
-            </div>
-            <p class="helper-text">* La conversión se sincroniza automáticamente al escribir.</p>
-        </div>
-    </div>
 
-    <script src="script.js"></script>
+<script>
+    const diasSemanas = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+    
+    const horas = [];
+    for(let h=0; h<24; h++) {
+        for(let m=0; m<60; m+=5) {
+            horas.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+        }
+    }
+
+    fetch('datos.json')
+        .then(response => response.json())
+        .then(datosArray => {
+            const datosDict = {};
+            datosArray.forEach(item => {
+                if (!datosDict[item.diaSemana]) datosDict[item.diaSemana] = {};
+                datosDict[item.diaSemana][item.hora] = item.probabilidadUp;
+            });
+            renderizarTabla(datosDict);
+        })
+        .catch(error => {
+            alert("Error al cargar datos.json");
+            console.error(error);
+        });
+
+function obtenerColorDinamico(probabilidadUp) {
+    const UMBRAL_FUERTE = 0.65; 
+
+    // VERDE: Si subida >= 65%
+    if (probabilidadUp >= UMBRAL_FUERTE) {
+        let opacidad = ((probabilidadUp - UMBRAL_FUERTE) / (1 - UMBRAL_FUERTE)) * 0.7 + 0.3;
+        return `rgba(0, 255, 0, ${opacidad})`;
+    }
+
+    // ROJO: Si bajada >= 65% (es decir, subida <= 35%)
+    let probabilidadDown = 1 - probabilidadUp;
+    if (probabilidadDown >= UMBRAL_FUERTE) {
+        let opacidad = ((probabilidadDown - UMBRAL_FUERTE) / (1 - UMBRAL_FUERTE)) * 0.7 + 0.3;
+        return `rgba(255, 0, 0, ${opacidad})`;
+    }
+
+    // Si no es "fuerte", devolvemos transparente
+    return 'transparent';
+}
+
+function renderizarTabla(datosDict) {
+    const thead = document.getElementById('tableHead');
+    const tbody = document.getElementById('tableBody');
+
+    let trHead = document.createElement('tr');
+    trHead.innerHTML = `<th class="col-fija header-esquina">Día</th>`;
+    horas.forEach(hora => { trHead.innerHTML += `<th>${hora}</th>`; });
+    thead.appendChild(trHead);
+
+    diasSemanas.forEach((nombreDia, indiceDia) => {
+        let tr = document.createElement('tr');
+        tr.innerHTML = `<td class="col-fija">${nombreDia}</td>`;
+        
+        horas.forEach(hora => {
+            let probabilidadUp = 0.5; // Valor neutro por defecto
+            if(datosDict[indiceDia] && datosDict[indiceDia][hora] !== undefined) {
+                probabilidadUp = datosDict[indiceDia][hora];
+            }
+            
+            let colorFondo = obtenerColorDinamico(probabilidadUp);
+            
+            let esMasProbableSubir = probabilidadUp >= 0.5;
+            let valorMostrar = esMasProbableSubir ? (probabilidadUp * 100) : ((1 - probabilidadUp) * 100);
+            let etiqueta = esMasProbableSubir ? "UP" : "DOWN";
+            
+            // Si el fondo es transparente, el texto será gris oscuro. Si tiene color, será blanco.
+            let colorTexto = colorFondo === 'transparent' ? '#555' : 'white';
+            let textoFinal = `${valorMostrar.toFixed(0)}% ${etiqueta}`;
+
+            tr.innerHTML += `<td style="background-color: ${colorFondo}; color: ${colorTexto}; border: 1px solid #333;">
+                                ${textoFinal}
+                             </td>`;
+        });
+        tbody.appendChild(tr);
+    });
+}
+</script>
 </body>
 </html>
